@@ -18,14 +18,11 @@ FIRING_TIME = 3500
 
 module.exports = class MissileLauncher
 
-  @findLauncherPath: ->
+  @findLaunchers: ->
     devices = HID.devices()
-    for device in devices
-      if device.vendorId == VENDOR_ID && device.productId == PRODUCT_ID
-        console.log 'Launcher found in', device.path
-        return device.path
-    console.error 'No launcher found!'
-    return null
+    match = (device) ->
+      device.vendorId == VENDOR_ID && device.productId == PRODUCT_ID
+    launchers = device.path for device in devices when match(device)
 
   constructor: (path) ->
     @launcher = new HID.HID(path)
