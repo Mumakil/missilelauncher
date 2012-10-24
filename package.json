@@ -1,0 +1,15 @@
+{
+  "name": "missilelauncher",
+  "version": "0.1.0",
+  "author": "Otto Vehviläinen <vehvis@flowdock.com>",
+  "description": "A script to control a DC Thunder Missle Launcher",
+  "dependencies": {
+    "node-hid": "0.0.15",
+    "q": "0.8.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mumakil/missilelauncher.git"
+  },
+  "license": "MIT"
+}
