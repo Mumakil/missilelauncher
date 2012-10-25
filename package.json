@@ -4,8 +4,8 @@
   "author": "Otto Vehviläinen <vehvis@flowdock.com>",
   "description": "A script to control a DC Thunder Missle Launcher",
   "dependencies": {
-    "node-hid": "0.0.15",
-    "q": "0.8.x"
+    "node-hid": "*",
+    "q": "*"
   },
   "repository": {
     "type": "git",
