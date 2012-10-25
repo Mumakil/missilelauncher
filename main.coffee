@@ -2,7 +2,7 @@ MissileLauncher = require './lib/missilelauncher'
 
 launcherPaths = MissileLauncher.findLaunchers()
 
-launchers = new MissileLauncher path for path in launcherPaths
+launchers = (new MissileLauncher(path) for path in launcherPaths)
 
 for launcher in launchers
   launcher.sequence [
