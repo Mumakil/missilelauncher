@@ -1,5 +1,4 @@
-HID = require 'node-hid'
-MissileLauncher = require './missilelauncher'
+MissileLauncher = require './lib/missilelauncher'
 
 launcherPaths = MissileLauncher.findLaunchers()
 
