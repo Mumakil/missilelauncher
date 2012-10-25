@@ -149,5 +149,3 @@ class MissileLauncher
     ready.promise
 
 module.exports = MissileLauncher
-
-console.log module.exports
