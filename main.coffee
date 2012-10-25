@@ -1,13 +1,17 @@
 HID = require 'node-hid'
 MissileLauncher = require './missilelauncher'
 
-launcher = new MissileLauncher MissileLauncher.findLaunchers()[0]
-launcher.sequence [
-  'RIGHT 2500'
-  'UP 550'
-  'FIRE'
-  'FIRE'
-  'FIRE'
-  'FIRE'
-  'RESET'
-]
+launcherPaths = MissileLauncher.findLaunchers()
+
+launchers = new MissileLauncher path for path in launcherPaths
+
+for launcher in launchers
+  launcher.sequence [
+    'RIGHT 2500'
+    'UP 550'
+    'FIRE'
+    # 'FIRE'
+    # 'FIRE'
+    # 'FIRE'
+    'RESET'
+  ]
