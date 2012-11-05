@@ -12,7 +12,13 @@ LAUNCHER_COMMANDS =
 VENDOR_ID = 0x2123
 PRODUCT_ID = 0x1010
 
-CONSTANTS = C = 
+extend = (dest, source...) ->
+  for src in source when typeof src == 'object'
+    dest[key] = src[key] for key in Object.keys src
+  dest
+
+# Default config for a DC Thunder missile launcher
+defaultConfig = 
   # Milliseconds it takes to turn the turret from side to side
   FULL_TURN_TIME: 5500
   # Milliseconds it takes to turn the turret from bottom to top
@@ -31,8 +37,7 @@ CONSTANTS = C =
   MAX_VERTICAL_ANGLE: 30
   MIN_VERTICAL_ANGLE: -5
   
-CONSTANTS.VERTICAL_TURN_RATE = C.FULL_PITCH_TIME / C.FULL_VERTICAL_ANGLE
-CONSTANTS.HORIZONTAL_TURN_RATE = C.FULL_TURN_TIME / C.FULL_HORIZONTAL_ANGLE
+  LOG: true
 
 class MissileLauncher
 
@@ -40,22 +45,29 @@ class MissileLauncher
     devices = HID.devices()
     match = (device) ->
       device.vendorId == VENDOR_ID && device.productId == PRODUCT_ID
-    launchers = device.path for device in devices when match(device)
+    launchers = (device.path for device in devices when match(device))
 
-  @CONSTANTS: CONSTANTS
+  @defaultConfig: defaultConfig
 
-  constructor: (path) ->
-    @launcher = new HID.HID(path)
+  constructor: (options) ->
+    @config = extend {}, MissileLauncher.defaultConfig, options.config
+    @config.FULL_VERTICAL_ANGLE = @config.MAX_VERTICAL_ANGLE - @config.MIN_VERTICAL_ANGLE
+    @config.FULL_HORIZONTAL_ANGLE = @config.MAX_HORIZONTAL_ANGLE - @config.MIN_HORIZONTAL_ANGLE
+    @config.HORIZONTAL_TURN_RATE = @config.FULL_TURN_TIME / @config.FULL_HORIZONTAL_ANGLE
+    @config.VERTICAL_TURN_RATE = @config.FULL_PITCH_TIME / @config.FULL_VERTICAL_ANGLE
+    @device = new HID.HID(options.path)
     @moving = false
     @verticalAngle = undefined
     @horizontalAngle = undefined
 
   sendCommand: (command) ->
-    cmd = LAUNCHER_COMMANDS[command]
-    @launcher.write [0x02, cmd, 0x00,0x00,0x00,0x00,0x00,0x00]
+    return false unless typeof command == 'string'
+    cmd = LAUNCHER_COMMANDS[command.toUpperCase()]
+    @device.write [0x02, cmd, 0x00,0x00,0x00,0x00,0x00,0x00]
 
   move: (direction, duration) ->
     return if @moving
+    @_log "Move #{direction} for #{duration}"
     @moving = true
     ready = Q.defer()
     @sendCommand direction
@@ -68,84 +80,89 @@ class MissileLauncher
 
   fire: ->
     return if @moving
+    @_log "Firing!"
     @moving = true
     ready = Q.defer()
     @sendCommand 'FIRE'
     setTimeout =>
       @moving = false
       ready.resolve()
-    , C.FIRING_TIME
+    , @config.FIRING_TIME
+    ready.promise
+
+  pause: (duration) ->
+    return if @moving
+    @_log "Pause for #{duration}"
+    @moving = true
+    ready = Q.defer()
+    setTimeout =>
+      ready.resolve()
+    , duration
     ready.promise
 
   reset: ->
-    @verticalAngle = C.MIN_VERTICAL_ANGLE
-    @horizontalAngle = C.MIN_HORIZONTAL_ANGLE
+    @_log 'Resetting...'
+    @verticalAngle = @config.MIN_VERTICAL_ANGLE
+    @horizontalAngle = @config.MIN_HORIZONTAL_ANGLE
     @sequence [
-      "DOWN #{C.FULL_PITCH_TIME}"
-      "LEFT #{C.FULL_TURN_TIME}"
+      "DOWN #{@config.FULL_PITCH_TIME}"
+      "LEFT #{@config.FULL_TURN_TIME}"
     ]
 
-  sequence: (commands) ->
-    parsedCommands = for commandString in commands
-      [command, duration] = commandString.split /\s/
-      command: command, duration: (if duration then parseInt(duration, 10) else undefined)
-    ready = Q.defer()
-    @sequentially(parsedCommands).then -> ready.resolve()
-    ready.promise
-
-  sequentially: (commandSequence) ->
-    ready = Q.defer()
-    next = commandSequence.shift()
-    if next
-      promise =
-        if next.command == 'FIRE'
-          console.log "Sequence: FIRE!"
-          @fire()
-        else if next.command == 'RESET'
-          console.log "Sequence: RESET!"
-          @reset()
-        else
-          console.log "Sequence: MOVE #{next.command} for #{next.duration}!"
-          @move next.command, next.duration
-      promise.then =>
-        @sequentially(commandSequence).then -> ready.resolve()
+  sequence: (commandSequence) ->
+    return Q.defer().resolve().promise if !commandSequence || commandSequence.length == 0
+    parsedSequence = (@parseCommand(cmd) for cmd in commandSequence)
+    ready = parsedSequence.shift()()
+    while next = parsedSequence.shift()
+      do ->
+        cmd = next
+        ready = ready.then cmd
+    ready
+  
+  parseCommand: (cmd) ->
+    [command, duration] = cmd.split /\s/
+    duration = parseInt(duration, 10) if duration
+    if command == 'FIRE'
+      => @fire()
+    else if command == 'RESET'
+      => @reset()
+    else if command == 'PAUSE'
+      => @pause duration
+    else if command in ['UP', 'DOWN', 'LEFT', 'RIGHT']
+      => @move command, duration
     else
-      ready.resolve()
-    ready.promise
-    
+      throw "#{command} is not a valid command"
+  
   turnBy: (angle) ->
     direction = if angle > 0 then 'RIGHT' else 'LEFT'
-    duration = Math.round(Math.abs(angle) * C.HORIZONTAL_TURN_RATE)
+    duration = Math.round(Math.abs(angle) * @config.HORIZONTAL_TURN_RATE)
     @horizontalAngle += angle
-    console.log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
+    @_log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
     @move(direction, duration)
     
   pitchBy: (angle) ->
     direction = if angle > 0 then 'UP' else 'DOWN'
-    duration = Math.round(Math.abs(angle) * C.VERTICAL_TURN_RATE)
+    duration = Math.round(Math.abs(angle) * @config.VERTICAL_TURN_RATE)
     @verticalAngle += angle
-    console.log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
+    @_log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
     @move(direction, duration)
   
   pointTo: (horizontalAngle, verticalAngle) ->
-    horizontalAngle = C.MAX_HORIZONTAL_ANGLE if horizontalAngle > C.MAX_HORIZONTAL_ANGLE
-    horizontalAngle = C.MIN_HORIZONTAL_ANGLE if horizontalAngle < C.MIN_HORIZONTAL_ANGLE
-    verticalAngle = C.MAX_VERTICAL_ANGLE if verticalAngle > C.MAX_VERTICAL_ANGLE
-    verticalAngle = C.MIN_VERTICAL_ANGLE if verticalAngle < C.MIN_VERTICAL_ANGLE
-    ready = Q.defer()
-    @pitchBy(verticalAngle - @verticalAngle).then =>
-      @turnBy(horizontalAngle - @horizontalAngle).then => ready.resolve()
-    ready.promise
+    horizontalAngle = @config.MAX_HORIZONTAL_ANGLE if horizontalAngle > @config.MAX_HORIZONTAL_ANGLE
+    horizontalAngle = @config.MIN_HORIZONTAL_ANGLE if horizontalAngle < @config.MIN_HORIZONTAL_ANGLE
+    verticalAngle = @config.MAX_VERTICAL_ANGLE if verticalAngle > @config.MAX_VERTICAL_ANGLE
+    verticalAngle = @config.MIN_VERTICAL_ANGLE if verticalAngle < @config.MIN_VERTICAL_ANGLE
+    console.log @verticalAngle, @horizontalAngle
+    @pitchBy(verticalAngle - @verticalAngle).then(=> @turnBy(horizontalAngle - @horizontalAngle))
   
   zero: ->
-    ready = Q.defer()
-    @reset().then => @pointTo(0,0).then -> ready.resolve()
-    ready.promise
+    @reset().then(=> @pointTo(0,0))
 
   fireAt: (horizontalAngle, verticalAngle) ->
-    ready = Q.defer()
-    @pointTo(horizontalAngle, verticalAngle).then =>
-      @fire().then -> ready.resolve()
-    ready.promise
-
+    @pointTo(horizontalAngle, verticalAngle)
+      .then(=> @fire().then -> ready.resolve())
+      
+  _log: (text...) ->
+    console.log text... if @config.LOG
+    
 module.exports = MissileLauncher
