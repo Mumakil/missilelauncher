@@ -7,6 +7,10 @@
     "node-hid": "*",
     "q": "*"
   },
+  "devDependencies": {
+    "mocha": "*",
+    "chai": "*"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Mumakil/missilelauncher.git"
