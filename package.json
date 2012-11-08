@@ -9,7 +9,8 @@
   },
   "devDependencies": {
     "mocha": "*",
-    "chai": "*"
+    "chai": "*",
+    "sinon": "*"
   },
   "repository": {
     "type": "git",

@@ -55,7 +55,10 @@ class MissileLauncher
     @config.FULL_HORIZONTAL_ANGLE = @config.MAX_HORIZONTAL_ANGLE - @config.MIN_HORIZONTAL_ANGLE
     @config.HORIZONTAL_TURN_RATE = @config.FULL_TURN_TIME / @config.FULL_HORIZONTAL_ANGLE
     @config.VERTICAL_TURN_RATE = @config.FULL_PITCH_TIME / @config.FULL_VERTICAL_ANGLE
-    @device = new HID.HID(options.path)
+    if options.device
+      @device = options.device
+    else
+      @device = new HID.HID(options.path)
     @moving = false
     @verticalAngle = undefined
     @horizontalAngle = undefined
