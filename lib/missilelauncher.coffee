@@ -20,9 +20,9 @@ extend = (dest, source...) ->
 # Default config for a DC Thunder missile launcher
 defaultConfig = 
   # Milliseconds it takes to turn the turret from side to side
-  FULL_TURN_TIME: 5500
+  FULL_TURN_TIME: 5465 # 5500
   # Milliseconds it takes to turn the turret from bottom to top
-  FULL_PITCH_TIME: 1100
+  FULL_PITCH_TIME: 835 # 1100
   # Millisencods it takes to fire
   FIRING_TIME: 3500
 
@@ -32,10 +32,10 @@ defaultConfig =
   FULL_VERTICAL_ANGLE: 35
   
   # Angle limits
-  MAX_HORIZONTAL_ANGLE: 165
-  MIN_HORIZONTAL_ANGLE: -165
-  MAX_VERTICAL_ANGLE: 30
-  MIN_VERTICAL_ANGLE: -5
+  MAX_HORIZONTAL_ANGLE: 138 # 165
+  MIN_HORIZONTAL_ANGLE: -138 # -165
+  MAX_VERTICAL_ANGLE: 28 # 30
+  MIN_VERTICAL_ANGLE: -6 # 5
   
   LOG: true
 
@@ -152,7 +152,6 @@ class MissileLauncher
     horizontalAngle = @config.MIN_HORIZONTAL_ANGLE if horizontalAngle < @config.MIN_HORIZONTAL_ANGLE
     verticalAngle = @config.MAX_VERTICAL_ANGLE if verticalAngle > @config.MAX_VERTICAL_ANGLE
     verticalAngle = @config.MIN_VERTICAL_ANGLE if verticalAngle < @config.MIN_VERTICAL_ANGLE
-    console.log @verticalAngle, @horizontalAngle
     @pitchBy(verticalAngle - @verticalAngle).then(=> @turnBy(horizontalAngle - @horizontalAngle))
   
   zero: ->
