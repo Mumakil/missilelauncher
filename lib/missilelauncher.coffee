@@ -59,7 +59,7 @@ class MissileLauncher
       @device = options.device
     else
       @device = new HID.HID(options.path)
-    @moving = false
+    @busy = false
     @verticalAngle = undefined
     @horizontalAngle = undefined
 
@@ -69,37 +69,37 @@ class MissileLauncher
     @device.write [0x02, cmd, 0x00,0x00,0x00,0x00,0x00,0x00]
 
   move: (direction, duration) ->
-    return if @moving
+    return if @busy
     @_log "Move #{direction} for #{duration}"
-    @moving = true
+    @busy = true
     ready = Q.defer()
     @sendCommand direction
     setTimeout =>
       @sendCommand 'STOP'
-      @moving = false
+      @busy = false
       ready.resolve()
     , duration
     ready.promise
 
   fire: ->
-    return if @moving
+    return if @busy
     @_log "Firing!"
-    @moving = true
+    @busy = true
     ready = Q.defer()
     @sendCommand 'FIRE'
     setTimeout =>
-      @moving = false
+      @busy = false
       ready.resolve()
     , @config.FIRING_TIME
     ready.promise
 
   pause: (duration) ->
-    return if @moving
+    return if @busy
     @_log "Pause for #{duration}"
-    @moving = true
+    @busy = true
     ready = Q.defer()
     setTimeout =>
-      @moving = false
+      @busy = false
       ready.resolve()
     , duration
     ready.promise
@@ -163,7 +163,7 @@ class MissileLauncher
 
   fireAt: (horizontalAngle, verticalAngle) ->
     @pointTo(horizontalAngle, verticalAngle)
-      .then(=> @fire().then -> ready.resolve())
+      .then(=> @fire())
       
   _log: (text...) ->
     console.log text... if @config.log
