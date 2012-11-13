@@ -204,10 +204,137 @@ describe 'Missilelauncher', ->
   describe 'angular commands', ->
     
     beforeEach ->
-      sinon.spy @missilelauncher, 'sendCommand'
+      sinon.spy @missilelauncher, 'move'
       
     afterEach ->
-      @missilelauncher.sendCommand.restore()
+      @missilelauncher.move.restore()
       
-    describe '#zero', (done) ->
+    describe '#zero', ->
       
+      beforeEach ->
+        sinon.spy @missilelauncher, 'reset'
+        sinon.spy(@missilelauncher, 'pointTo').withArgs(0,0)
+        
+      afterEach ->
+        @missilelauncher.reset.restore()
+        @missilelauncher.pointTo.restore()
+
+      it 'should call first reset and then point to 0,0, ending in (0,0)', (done) ->
+        @missilelauncher.zero().then done
+        expect(@missilelauncher.reset.calledOnce).to.be.true
+        @clock.tick 100 # Reset, vertical
+        process.nextTick => process.nextTick =>
+          @clock.tick 100 # Reset, horizontal
+          process.nextTick => process.nextTick =>
+            expect(@missilelauncher.pointTo.withArgs(0,0).calledOnce).to.be.true
+            process.nextTick => process.nextTick =>
+              @clock.tick 50 # Zero, vertical
+              process.nextTick => process.nextTick =>
+                @clock.tick 50 # Zero, horizontal
+                expect(@missilelauncher.horizontalAngle).to.equal 0
+                expect(@missilelauncher.verticalAngle).to.equal 0
+                
+    describe '#turnBy', ->
+      
+      beforeEach ->
+        @missilelauncher.horizontalAngle = 0
+      
+      it 'should return promise', ->
+        expect(@missilelauncher.turnBy(1).then).to.be.a 'function'
+      
+      it 'should turn left on negative angles', ->
+        @missilelauncher.move.withArgs('LEFT')
+        @missilelauncher.turnBy(-10)
+        expect(@missilelauncher.move.withArgs('LEFT').calledOnce).to.be.true
+        expect(@missilelauncher.horizontalAngle).to.equal -10
+        
+      it 'should turn right on positive angles', ->
+        @missilelauncher.move.withArgs('RIGHT')
+        @missilelauncher.turnBy(10)
+        expect(@missilelauncher.move.withArgs('RIGHT').calledOnce).to.be.true
+        expect(@missilelauncher.horizontalAngle).to.equal 10
+        
+      it 'should calculate correct time for turning', ->
+        @missilelauncher.move.withArgs('RIGHT', 50)
+        @missilelauncher.turnBy 90
+        expect(@missilelauncher.move.withArgs('RIGHT', 50).calledOnce).to.be.true
+        
+    describe '#pitchBy', ->
+
+      beforeEach ->
+        @missilelauncher.verticalAngle = 0
+
+      it 'should return promise', ->
+        expect(@missilelauncher.pitchBy(1).then).to.be.a 'function'
+
+      it 'should turn down on negative angles', ->
+        @missilelauncher.move.withArgs('DOWN')
+        @missilelauncher.pitchBy(-10)
+        expect(@missilelauncher.move.withArgs('DOWN').calledOnce).to.be.true
+        expect(@missilelauncher.verticalAngle).to.equal -10
+
+      it 'should turn up on positive angles', ->
+        @missilelauncher.move.withArgs('UP')
+        @missilelauncher.pitchBy(10)
+        expect(@missilelauncher.move.withArgs('UP').calledOnce).to.be.true
+        expect(@missilelauncher.verticalAngle).to.equal 10
+
+      it 'should calculate correct time for turning', ->
+        @missilelauncher.move.withArgs('UP', 50)
+        @missilelauncher.pitchBy 45
+        expect(@missilelauncher.move.withArgs('UP', 50).calledOnce).to.be.true
+        
+    describe '#pointTo', ->
+      
+      beforeEach ->
+        @missilelauncher.verticalAngle = 0
+        @missilelauncher.horizontalAngle = 0
+        sinon.spy @missilelauncher, 'turnBy'
+        sinon.spy @missilelauncher, 'pitchBy'
+        
+      afterEach ->
+        @missilelauncher.turnBy.restore()
+        @missilelauncher.pitchBy.restore()
+        
+      it 'should turn only to maximum available', (done) ->
+        @missilelauncher.pitchBy.withArgs(45)
+        @missilelauncher.turnBy.withArgs(90)
+        @missilelauncher.pointTo(180, 180).then done
+        @clock.tick(100)
+        process.nextTick => process.nextTick =>
+          @clock.tick(100)
+          expect(@missilelauncher.pitchBy.withArgs(45).calledOnce).to.be.true
+          expect(@missilelauncher.turnBy.withArgs(90).calledOnce).to.be.true
+        
+      it 'should turn only to minimum available', (done) ->
+        @missilelauncher.pitchBy.withArgs(-45)
+        @missilelauncher.turnBy.withArgs(-90)
+        @missilelauncher.pointTo(-180, -180).then done
+        @clock.tick(100)
+        process.nextTick => process.nextTick =>
+          @clock.tick(100)
+          expect(@missilelauncher.pitchBy.withArgs(-45).calledOnce).to.be.true
+          expect(@missilelauncher.turnBy.withArgs(-90).calledOnce).to.be.true
+    
+    describe '#fireAt', ->
+      
+      beforeEach ->
+        @missilelauncher.verticalAngle = 0
+        @missilelauncher.horizontalAngle = 0
+        sinon.spy @missilelauncher, 'pointTo'
+        sinon.spy @missilelauncher, 'fire'
+        
+      afterEach ->
+        @missilelauncher.pointTo.restore()
+        @missilelauncher.fire.restore()
+        
+      it 'should turn and fire', (done) ->
+        @missilelauncher.pointTo.withArgs(10, 20)
+        @missilelauncher.fireAt(10, 20).then done
+        expect(@missilelauncher.pointTo.withArgs(10, 20).calledOnce).to.be.true
+        @clock.tick(100)
+        process.nextTick => process.nextTick =>
+          @clock.tick(100)
+          process.nextTick => process.nextTick =>
+            expect(@missilelauncher.fire.calledOnce).to.be.true
+            @clock.tick(100)
