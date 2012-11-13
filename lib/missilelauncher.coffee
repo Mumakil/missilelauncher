@@ -37,7 +37,7 @@ defaultConfig =
   MAX_VERTICAL_ANGLE: 28 # 30
   MIN_VERTICAL_ANGLE: -6 # 5
   
-  LOG: true
+  log: true
 
 class MissileLauncher
 
@@ -99,6 +99,7 @@ class MissileLauncher
     @moving = true
     ready = Q.defer()
     setTimeout =>
+      @moving = false
       ready.resolve()
     , duration
     ready.promise
@@ -165,6 +166,6 @@ class MissileLauncher
       .then(=> @fire().then -> ready.resolve())
       
   _log: (text...) ->
-    console.log text... if @config.LOG
+    console.log text... if @config.log
     
 module.exports = MissileLauncher
