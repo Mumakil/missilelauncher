@@ -3,7 +3,7 @@ chai = require 'chai'
 
 expect = chai.expect
 
-Missilelauncher = require '../lib/missilelauncher'
+Missilelauncher = require '../src/missilelauncher'
 
 describe 'Missilelauncher', ->
   
@@ -15,20 +15,40 @@ describe 'Missilelauncher', ->
       device: @device
       config: 
         log: false
-        FIRING_TIME: 100
-        FULL_PITCH_TIME: 100
-        FULL_TURN_TIME: 100
-        MAX_HORIZONTAL_ANGLE: 90
-        MIN_HORIZONTAL_ANGLE: -90
-        MAX_VERTICAL_ANGLE: 45
-        MIN_VERTICAL_ANGLE: -45
+        time:
+          fire: 100
+          fullTurn: 100
+          fullPitch: 100
+        angle:
+          horizontal: 
+            max: 90
+            min: -90
+          vertical:
+            max: 45
+            min: -45
     
   afterEach ->
     @clock.restore()
     
   it 'should populate config', ->
-    for property in ['FULL_VERTICAL_ANGLE', 'FULL_HORIZONTAL_ANGLE', 'HORIZONTAL_TURN_RATE', 'VERTICAL_TURN_RATE']
-      expect(@missilelauncher.config[property]).to.be.a 'number'
+    config = 
+      log: false
+      time:
+        fire: 100
+        fullTurn: 100
+        fullPitch: 100
+      angle:
+        horizontal: 
+          max: 90
+          min: -90
+          rate: 100 / 180
+          full: 180
+        vertical:
+          max: 45
+          min: -45
+          rate: 100 / 90
+          full: 90
+    expect(@missilelauncher.config).to.deep.equal config
     
   describe '#sendCommand', ->
     
@@ -198,8 +218,7 @@ describe 'Missilelauncher', ->
         @clock.tick 100
         process.nextTick => process.nextTick =>
           @clock.tick 100
-          expect(@missilelauncher.verticalAngle).to.equal -45
-          expect(@missilelauncher.horizontalAngle).to.equal -90
+          expect(@missilelauncher.direction).to.deep.equal vertical: -45, horizontal: -90
 
   describe 'angular commands', ->
     
@@ -231,13 +250,12 @@ describe 'Missilelauncher', ->
               @clock.tick 50 # Zero, vertical
               process.nextTick => process.nextTick =>
                 @clock.tick 50 # Zero, horizontal
-                expect(@missilelauncher.horizontalAngle).to.equal 0
-                expect(@missilelauncher.verticalAngle).to.equal 0
+                expect(@missilelauncher.direction).to.deep.equal vertical: 0, horizontal: 0
                 
     describe '#turnBy', ->
       
       beforeEach ->
-        @missilelauncher.horizontalAngle = 0
+        @missilelauncher.direction.horizontal = 0
       
       it 'should return promise', ->
         expect(@missilelauncher.turnBy(1).then).to.be.a 'function'
@@ -246,13 +264,13 @@ describe 'Missilelauncher', ->
         @missilelauncher.move.withArgs('LEFT')
         @missilelauncher.turnBy(-10)
         expect(@missilelauncher.move.withArgs('LEFT').calledOnce).to.be.true
-        expect(@missilelauncher.horizontalAngle).to.equal -10
+        expect(@missilelauncher.direction.horizontal).to.equal -10
         
       it 'should turn right on positive angles', ->
         @missilelauncher.move.withArgs('RIGHT')
         @missilelauncher.turnBy(10)
         expect(@missilelauncher.move.withArgs('RIGHT').calledOnce).to.be.true
-        expect(@missilelauncher.horizontalAngle).to.equal 10
+        expect(@missilelauncher.direction.horizontal).to.equal 10
         
       it 'should calculate correct time for turning', ->
         @missilelauncher.move.withArgs('RIGHT', 50)
@@ -262,7 +280,7 @@ describe 'Missilelauncher', ->
     describe '#pitchBy', ->
 
       beforeEach ->
-        @missilelauncher.verticalAngle = 0
+        @missilelauncher.direction.vertical = 0
 
       it 'should return promise', ->
         expect(@missilelauncher.pitchBy(1).then).to.be.a 'function'
@@ -271,13 +289,13 @@ describe 'Missilelauncher', ->
         @missilelauncher.move.withArgs('DOWN')
         @missilelauncher.pitchBy(-10)
         expect(@missilelauncher.move.withArgs('DOWN').calledOnce).to.be.true
-        expect(@missilelauncher.verticalAngle).to.equal -10
+        expect(@missilelauncher.direction.vertical).to.equal -10
 
       it 'should turn up on positive angles', ->
         @missilelauncher.move.withArgs('UP')
         @missilelauncher.pitchBy(10)
         expect(@missilelauncher.move.withArgs('UP').calledOnce).to.be.true
-        expect(@missilelauncher.verticalAngle).to.equal 10
+        expect(@missilelauncher.direction.vertical).to.equal 10
 
       it 'should calculate correct time for turning', ->
         @missilelauncher.move.withArgs('UP', 50)
@@ -287,8 +305,9 @@ describe 'Missilelauncher', ->
     describe '#pointTo', ->
       
       beforeEach ->
-        @missilelauncher.verticalAngle = 0
-        @missilelauncher.horizontalAngle = 0
+        @missilelauncher.direction = 
+          vertical: 0
+          horizontal: 0
         sinon.spy @missilelauncher, 'turnBy'
         sinon.spy @missilelauncher, 'pitchBy'
         
@@ -309,7 +328,7 @@ describe 'Missilelauncher', ->
       it 'should turn only to minimum available', (done) ->
         @missilelauncher.pitchBy.withArgs(-45)
         @missilelauncher.turnBy.withArgs(-90)
-        @missilelauncher.pointTo(-180, -180).then done
+        @missilelauncher.pointTo(horizontal: -180, vertical: -180).then done
         @clock.tick(100)
         process.nextTick => process.nextTick =>
           @clock.tick(100)
@@ -319,8 +338,9 @@ describe 'Missilelauncher', ->
     describe '#fireAt', ->
       
       beforeEach ->
-        @missilelauncher.verticalAngle = 0
-        @missilelauncher.horizontalAngle = 0
+        @missilelauncher.direction = 
+          vertical: 0
+          horizontal: 0
         sinon.spy @missilelauncher, 'pointTo'
         sinon.spy @missilelauncher, 'fire'
         

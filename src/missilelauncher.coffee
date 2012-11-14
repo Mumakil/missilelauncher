@@ -1,7 +1,38 @@
 HID = require 'node-hid'
 Q = require 'q'
 
-LAUNCHER_COMMANDS =
+extend = (dest, source...) ->
+  for src in source when typeof src == 'object'
+    for key in Object.keys src
+      if typeof src[key] == 'object'
+        dest[key] = extend {}, dest[key], src[key]
+      else
+        dest[key] = src[key]
+  dest
+
+# Default config for a DC Thunder missile launcher
+defaultConfig = 
+  # time limits
+  time:
+    # milliseconds it takes to turn the turret from side to side
+    fullTurn: 5465 # 5500
+    # milliseconds it takes to turn the turret from bottom to top
+    fullPitch: 835 # 1100
+    # millisencods it takes to fire
+    fire: 3500
+  
+  # angle limits
+  angle:
+    horizontal:
+      max: 138
+      min: -138
+    vertical: 
+      max: 28
+      min: -6
+  
+  log: true
+
+commands =
   DOWN    : 0x01
   UP      : 0x02
   LEFT    : 0x04
@@ -9,63 +40,39 @@ LAUNCHER_COMMANDS =
   FIRE    : 0x10
   STOP    : 0x20
 
-VENDOR_ID = 0x2123
-PRODUCT_ID = 0x1010
-
-extend = (dest, source...) ->
-  for src in source when typeof src == 'object'
-    dest[key] = src[key] for key in Object.keys src
-  dest
-
-# Default config for a DC Thunder missile launcher
-defaultConfig = 
-  # Milliseconds it takes to turn the turret from side to side
-  FULL_TURN_TIME: 5465 # 5500
-  # Milliseconds it takes to turn the turret from bottom to top
-  FULL_PITCH_TIME: 835 # 1100
-  # Millisencods it takes to fire
-  FIRING_TIME: 3500
-
-  # Full angle in degrees that the turret turns horizontally
-  FULL_HORIZONTAL_ANGLE: 330
-  # Full angle in dedgrees that the turret turns vertically
-  FULL_VERTICAL_ANGLE: 35
-  
-  # Angle limits
-  MAX_HORIZONTAL_ANGLE: 138 # 165
-  MIN_HORIZONTAL_ANGLE: -138 # -165
-  MAX_VERTICAL_ANGLE: 28 # 30
-  MIN_VERTICAL_ANGLE: -6 # 5
-  
-  log: true
-
-class MissileLauncher
+class Missilelauncher
 
   @findLaunchers: ->
     devices = HID.devices()
     match = (device) ->
-      device.vendorId == VENDOR_ID && device.productId == PRODUCT_ID
+      device.vendorId == Missilelauncher.vendorId && device.productId == Missilelauncher.productId
     launchers = (device.path for device in devices when match(device))
 
   @defaultConfig: defaultConfig
+  @vendorId: 0x2123
+  @productId: 0x1010
+  @commands: commands
 
   constructor: (options) ->
-    @config = extend {}, MissileLauncher.defaultConfig, options.config
-    @config.FULL_VERTICAL_ANGLE = @config.MAX_VERTICAL_ANGLE - @config.MIN_VERTICAL_ANGLE
-    @config.FULL_HORIZONTAL_ANGLE = @config.MAX_HORIZONTAL_ANGLE - @config.MIN_HORIZONTAL_ANGLE
-    @config.HORIZONTAL_TURN_RATE = @config.FULL_TURN_TIME / @config.FULL_HORIZONTAL_ANGLE
-    @config.VERTICAL_TURN_RATE = @config.FULL_PITCH_TIME / @config.FULL_VERTICAL_ANGLE
+    config = extend {}, Missilelauncher.defaultConfig, options.config
+    @config = extend config, 
+      angle:
+        vertical:
+          full: config.angle.vertical.max - config.angle.vertical.min
+          rate: config.time.fullPitch / (config.angle.vertical.max - config.angle.vertical.min)
+        horizontal: 
+          full: config.angle.horizontal.max - config.angle.horizontal.min
+          rate: config.time.fullTurn / (config.angle.horizontal.max - config.angle.horizontal.min)
     if options.device
       @device = options.device
     else
       @device = new HID.HID(options.path)
     @busy = false
-    @verticalAngle = undefined
-    @horizontalAngle = undefined
+    @direction = {}
 
   sendCommand: (command) ->
     return false unless typeof command == 'string'
-    cmd = LAUNCHER_COMMANDS[command.toUpperCase()]
+    cmd = Missilelauncher.commands[command.toUpperCase()]
     @device.write [0x02, cmd, 0x00,0x00,0x00,0x00,0x00,0x00]
 
   move: (direction, duration) ->
@@ -90,7 +97,7 @@ class MissileLauncher
     setTimeout =>
       @busy = false
       ready.resolve()
-    , @config.FIRING_TIME
+    , @config.time.fire
     ready.promise
 
   pause: (duration) ->
@@ -106,11 +113,12 @@ class MissileLauncher
 
   reset: ->
     @_log 'Resetting...'
-    @verticalAngle = @config.MIN_VERTICAL_ANGLE
-    @horizontalAngle = @config.MIN_HORIZONTAL_ANGLE
+    @direction = 
+      horizontal: @config.angle.horizontal.min
+      vertical: @config.angle.vertical.min
     @sequence [
-      "DOWN #{@config.FULL_PITCH_TIME}"
-      "LEFT #{@config.FULL_TURN_TIME}"
+      "DOWN #{@config.time.fullPitch}"
+      "LEFT #{@config.time.fullTurn}"
     ]
 
   sequence: (commandSequence) ->
@@ -139,33 +147,36 @@ class MissileLauncher
   
   turnBy: (angle) ->
     direction = if angle > 0 then 'RIGHT' else 'LEFT'
-    duration = Math.round(Math.abs(angle) * @config.HORIZONTAL_TURN_RATE)
-    @horizontalAngle += angle
+    duration = Math.round(Math.abs(angle) * @config.angle.horizontal.rate)
+    @direction.horizontal += angle
     @_log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
     @move(direction, duration)
     
   pitchBy: (angle) ->
     direction = if angle > 0 then 'UP' else 'DOWN'
-    duration = Math.round(Math.abs(angle) * @config.VERTICAL_TURN_RATE)
-    @verticalAngle += angle
+    duration = Math.round(Math.abs(angle) * @config.angle.vertical.rate)
+    @direction.vertical += angle
     @_log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
     @move(direction, duration)
   
-  pointTo: (horizontalAngle, verticalAngle) ->
-    horizontalAngle = @config.MAX_HORIZONTAL_ANGLE if horizontalAngle > @config.MAX_HORIZONTAL_ANGLE
-    horizontalAngle = @config.MIN_HORIZONTAL_ANGLE if horizontalAngle < @config.MIN_HORIZONTAL_ANGLE
-    verticalAngle = @config.MAX_VERTICAL_ANGLE if verticalAngle > @config.MAX_VERTICAL_ANGLE
-    verticalAngle = @config.MIN_VERTICAL_ANGLE if verticalAngle < @config.MIN_VERTICAL_ANGLE
-    @pitchBy(verticalAngle - @verticalAngle).then(=> @turnBy(horizontalAngle - @horizontalAngle))
+  pointTo: (horizontal, vertical) ->
+    if typeof horizontal == 'object'
+      {horizontal, vertical} = horizontal
+    horizontal = @config.angle.horizontal.max if horizontal > @config.angle.horizontal.max
+    horizontal = @config.angle.horizontal.min if horizontal < @config.angle.horizontal.min
+    vertical = @config.angle.vertical.max if vertical > @config.angle.vertical.max
+    vertical = @config.angle.vertical.min if vertical < @config.angle.vertical.min
+    @pitchBy(vertical - @direction.vertical)
+      .then(=> @turnBy(horizontal - @direction.horizontal))
   
   zero: ->
     @reset().then(=> @pointTo(0,0))
 
-  fireAt: (horizontalAngle, verticalAngle) ->
-    @pointTo(horizontalAngle, verticalAngle)
+  fireAt: (horizontal, vertical) ->
+    @pointTo(horizontal, vertical)
       .then(=> @fire())
       
   _log: (text...) ->
     console.log text... if @config.log
     
-module.exports = MissileLauncher
+module.exports = Missilelauncher
