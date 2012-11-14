@@ -1,8 +1,6 @@
 missilelauncher.js
 ==================
 
-[![Build Status](https://travis-ci.org/Mumakil/missilelauncher.png)](https://travis-ci.org/Mumakil/missilelauncher)
-
 Small node library to control a DC Thunder nerf missile launcher.
 
 Quickstart
