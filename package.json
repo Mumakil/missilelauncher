@@ -17,6 +17,9 @@
     "type": "git",
     "url": "https://github.com/Mumakil/missilelauncher.git"
   },
+  "scripts": {
+    "test": "make test"
+  },
   "license": "MIT",
   "main": "./lib/missilelauncher",
   "engines": {
