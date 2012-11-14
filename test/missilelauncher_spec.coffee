@@ -50,52 +50,52 @@ describe 'Missilelauncher', ->
           full: 90
     expect(@missilelauncher.config).to.deep.equal config
     
-  describe '#sendCommand', ->
+  describe '#_sendCommand', ->
     
     it 'should parse string commands', ->
-      @missilelauncher.sendCommand 'UP'
+      @missilelauncher._sendCommand 'UP'
       expect(@stub.called).to.be.true
     
     it 'should fail on everything else except string', ->
-      expect(@missilelauncher.sendCommand {}).to.be.false
+      expect(@missilelauncher._sendCommand {}).to.be.false
       expect(@stub.called).to.be.false
     
     it 'should send correct command', ->
-      @missilelauncher.sendCommand 'STOP'
+      @missilelauncher._sendCommand 'STOP'
       expect(@stub.called).to.be.true
       expect(@stub.getCall(0).args[0][1]).to.equal 0x20
       
     it 'should work with lowercase command', ->
-      @missilelauncher.sendCommand 'stop'
+      @missilelauncher._sendCommand 'stop'
       expect(@stub.called).to.be.true
       expect(@stub.getCall(0).args[0][1]).to.equal 0x20
       
   describe 'command', ->
 
     beforeEach ->
-      sinon.stub @missilelauncher, 'sendCommand'
+      sinon.stub @missilelauncher, '_sendCommand'
       
     afterEach ->
-      @missilelauncher.sendCommand.restore()
+      @missilelauncher._sendCommand.restore()
 
     describe '#move', ->
       
       it 'should not move if already moving', ->
         @missilelauncher.busy = true
         expect(@missilelauncher.move 'UP', 100).to.be.undefined
-        expect(@missilelauncher.sendCommand.called).to.be.false
+        expect(@missilelauncher._sendCommand.called).to.be.false
         
       it 'should send command and stop after time', (done) ->
-        @missilelauncher.sendCommand.withArgs 'UP'
-        @missilelauncher.sendCommand.withArgs 'STOP'
+        @missilelauncher._sendCommand.withArgs 'UP'
+        @missilelauncher._sendCommand.withArgs 'STOP'
         ready = @missilelauncher.move 'UP', 100
         expect(@missilelauncher.busy).to.be.true
-        expect(@missilelauncher.sendCommand.withArgs('UP').calledOnce).to.be.true
+        expect(@missilelauncher._sendCommand.withArgs('UP').calledOnce).to.be.true
         @clock.tick(99)
-        expect(@missilelauncher.sendCommand.withArgs('STOP').called).to.be.false
+        expect(@missilelauncher._sendCommand.withArgs('STOP').called).to.be.false
         @clock.tick(1)
         expect(@missilelauncher.busy).to.be.false
-        expect(@missilelauncher.sendCommand.withArgs('STOP').calledOnce).to.be.true
+        expect(@missilelauncher._sendCommand.withArgs('STOP').calledOnce).to.be.true
         ready.then done
 
     describe '#fire', ->
@@ -103,8 +103,8 @@ describe 'Missilelauncher', ->
       it 'should fire and resolve after firing timer has elapsed', (done) ->
         ready = @missilelauncher.fire()
         expect(@missilelauncher.busy).to.be.true
-        expect(@missilelauncher.sendCommand.called).to.be.true
-        expect(@missilelauncher.sendCommand.getCall(0).args[0]).to.equal 'FIRE'
+        expect(@missilelauncher._sendCommand.called).to.be.true
+        expect(@missilelauncher._sendCommand.getCall(0).args[0]).to.equal 'FIRE'
         @clock.tick(99)
         expect(@missilelauncher.busy).to.be.true
         @clock.tick(1)
@@ -126,11 +126,11 @@ describe 'Missilelauncher', ->
     
     beforeEach ->
       sinon.spy @missilelauncher, 'move'
-      sinon.stub @missilelauncher, 'sendCommand'
+      sinon.stub @missilelauncher, '_sendCommand'
       
     afterEach ->
       @missilelauncher.move.restore()
-      @missilelauncher.sendCommand.restore()
+      @missilelauncher._sendCommand.restore()
     
     describe '#parseCommand', ->
       
@@ -171,7 +171,7 @@ describe 'Missilelauncher', ->
         spy.withArgs('DOWN', 30)
         spy.withArgs('LEFT', 40)
         sinon.spy(@missilelauncher, 'pause').withArgs(50)
-        @missilelauncher.sendCommand.withArgs('STOP')
+        @missilelauncher._sendCommand.withArgs('STOP')
       
       it 'should parse the sequence and execute the commands', (done) ->
         promise = @missilelauncher.sequence [
@@ -184,15 +184,15 @@ describe 'Missilelauncher', ->
         expect(@missilelauncher.busy).to.be.true
         expect(@missilelauncher.move.withArgs('UP', 20).calledOnce).to.be.true
         @clock.tick 20
-        expect(@missilelauncher.sendCommand.withArgs('STOP').calledOnce).to.be.true
+        expect(@missilelauncher._sendCommand.withArgs('STOP').calledOnce).to.be.true
         process.nextTick => process.nextTick =>
           expect(@missilelauncher.move.withArgs('DOWN', 30).calledOnce).to.be.true
           @clock.tick 30
-          expect(@missilelauncher.sendCommand.withArgs('STOP').calledTwice).to.be.true
+          expect(@missilelauncher._sendCommand.withArgs('STOP').calledTwice).to.be.true
           process.nextTick => process.nextTick =>
             expect(@missilelauncher.move.withArgs('LEFT', 40).calledOnce).to.be.true
             @clock.tick 40
-            expect(@missilelauncher.sendCommand.withArgs('STOP').calledThrice).to.be.true
+            expect(@missilelauncher._sendCommand.withArgs('STOP').calledThrice).to.be.true
             process.nextTick => process.nextTick =>
               @clock.tick 50
               process.nextTick =>
@@ -219,6 +219,63 @@ describe 'Missilelauncher', ->
         process.nextTick => process.nextTick =>
           @clock.tick 100
           expect(@missilelauncher.direction).to.deep.equal vertical: -45, horizontal: -90
+
+  describe '#_limitTurning', ->
+    
+    beforeEach ->
+      @missilelauncher.direction = {horizontal: 30, vertical: 10}
+      
+    it 'should limit horizontal to allowed range', ->
+      expect(@missilelauncher._limitTurning(90, 'horizontal')).to.equal 60
+      expect(@missilelauncher._limitTurning(-180, 'horizontal')).to.equal -120
+      expect(@missilelauncher._limitTurning(-30, 'horizontal')).to.equal -30
+
+    it 'should limit vertical to allowed range', ->
+      expect(@missilelauncher._limitTurning(90, 'vertical')).to.equal 35
+      expect(@missilelauncher._limitTurning(-180, 'vertical')).to.equal -55
+      expect(@missilelauncher._limitTurning(-10, 'horizontal')).to.equal -10
+
+  describe '#timeToTurn', ->
+    
+    beforeEach ->
+      @missilelauncher.direction = {horizontal: 30, vertical: 15}
+      sinon.spy @missilelauncher, '_limitTurning'
+      
+    afterEach ->
+      @missilelauncher._limitTurning.restore()
+      
+    it 'should calculate too big horizontal angle correctly', ->
+      @missilelauncher._limitTurning.withArgs(70)
+      for args in [[100], [70, null, false]]
+        expect(@missilelauncher.timeToTurn args...).to.equal 33 
+      expect(@missilelauncher._limitTurning.withArgs(70).calledTwice).to.be.true
+        
+    it 'should calculate too big vertical angle correctly', ->
+      @missilelauncher._limitTurning.withArgs(85)
+      for args in [[vertical: 100], [null, 85, false]]
+        expect(@missilelauncher.timeToTurn args...).to.equal 33
+      expect(@missilelauncher._limitTurning.withArgs(85).calledTwice).to.be.true
+
+    it 'should calculate too small horizontal angle correctly', ->
+      @missilelauncher._limitTurning.withArgs(-130)
+      for args in [[-100], [-130, null, false]]
+        expect(@missilelauncher.timeToTurn args...).to.equal 67
+      expect(@missilelauncher._limitTurning.withArgs(-130).calledTwice).to.be.true
+
+    it 'should calculate too small vertical angle correctly', ->
+      @missilelauncher._limitTurning.withArgs(-75)
+      for args in [[vertical: -60], [null, -75, false]]
+        expect(@missilelauncher.timeToTurn args...).to.equal 67
+      expect(@missilelauncher._limitTurning.withArgs(-75).calledTwice).to.be.true
+      
+    it 'should work with both directions', ->
+      @missilelauncher.direction = {horizontal: 0, vertical: 0}
+      @missilelauncher._limitTurning.withArgs(45, 'horizontal')
+      @missilelauncher._limitTurning.withArgs(22.5, 'vertical')
+      for args in [[vertical: 22.5, horizontal: 45], [45, 22.5, false]]
+        expect(@missilelauncher.timeToTurn args...).to.equal 50
+      expect(@missilelauncher._limitTurning.withArgs(45, 'horizontal').calledTwice).to.be.true
+      expect(@missilelauncher._limitTurning.withArgs(22.5, 'vertical').calledTwice).to.be.true
 
   describe 'angular commands', ->
     
@@ -255,10 +312,20 @@ describe 'Missilelauncher', ->
     describe '#turnBy', ->
       
       beforeEach ->
+        sinon.spy @missilelauncher, '_limitTurning'
         @missilelauncher.direction.horizontal = 0
+      
+      afterEach ->
+        @missilelauncher._limitTurning.restore()
       
       it 'should return promise', ->
         expect(@missilelauncher.turnBy(1).then).to.be.a 'function'
+      
+      it 'should call limit', ->
+        @missilelauncher._limitTurning.withArgs(100, 'horizontal')
+        @missilelauncher.turnBy(100)
+        expect(@missilelauncher._limitTurning.withArgs(100, 'horizontal').calledOnce, 'limit call').to.be.true
+        expect(@missilelauncher._limitTurning.withArgs(100, 'horizontal').returned(90), 'limit returned').to.be.true
       
       it 'should turn left on negative angles', ->
         @missilelauncher.move.withArgs('LEFT')
@@ -280,10 +347,20 @@ describe 'Missilelauncher', ->
     describe '#pitchBy', ->
 
       beforeEach ->
+        sinon.spy @missilelauncher, '_limitTurning'
         @missilelauncher.direction.vertical = 0
+
+      afterEach ->
+        @missilelauncher._limitTurning.restore()
 
       it 'should return promise', ->
         expect(@missilelauncher.pitchBy(1).then).to.be.a 'function'
+
+      it 'should call limit', ->
+        @missilelauncher._limitTurning.withArgs(100, 'vertical')
+        @missilelauncher.pitchBy(100)
+        expect(@missilelauncher._limitTurning.withArgs(100, 'vertical').calledOnce, 'limit call').to.be.true
+        expect(@missilelauncher._limitTurning.withArgs(100, 'vertical').returned(45), 'limit returned').to.be.true
 
       it 'should turn down on negative angles', ->
         @missilelauncher.move.withArgs('DOWN')
@@ -316,24 +393,24 @@ describe 'Missilelauncher', ->
         @missilelauncher.pitchBy.restore()
         
       it 'should turn only to maximum available', (done) ->
-        @missilelauncher.pitchBy.withArgs(45)
-        @missilelauncher.turnBy.withArgs(90)
+        @missilelauncher.pitchBy.withArgs(180)
+        @missilelauncher.turnBy.withArgs(180)
         @missilelauncher.pointTo(180, 180).then done
         @clock.tick(100)
         process.nextTick => process.nextTick =>
           @clock.tick(100)
-          expect(@missilelauncher.pitchBy.withArgs(45).calledOnce).to.be.true
-          expect(@missilelauncher.turnBy.withArgs(90).calledOnce).to.be.true
+          expect(@missilelauncher.pitchBy.withArgs(180).calledOnce, 'pitchBy').to.be.true
+          expect(@missilelauncher.turnBy.withArgs(180).calledOnce, 'turnBy').to.be.true
         
       it 'should turn only to minimum available', (done) ->
-        @missilelauncher.pitchBy.withArgs(-45)
-        @missilelauncher.turnBy.withArgs(-90)
+        @missilelauncher.pitchBy.withArgs(-180)
+        @missilelauncher.turnBy.withArgs(-180)
         @missilelauncher.pointTo(horizontal: -180, vertical: -180).then done
         @clock.tick(100)
         process.nextTick => process.nextTick =>
           @clock.tick(100)
-          expect(@missilelauncher.pitchBy.withArgs(-45).calledOnce).to.be.true
-          expect(@missilelauncher.turnBy.withArgs(-90).calledOnce).to.be.true
+          expect(@missilelauncher.pitchBy.withArgs(-180).calledOnce).to.be.true
+          expect(@missilelauncher.turnBy.withArgs(-180).calledOnce).to.be.true
     
     describe '#fireAt', ->
       

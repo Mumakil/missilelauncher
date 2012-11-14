@@ -45,7 +45,7 @@ class Missilelauncher
   @findLaunchers: ->
     devices = HID.devices()
     match = (device) ->
-      device.vendorId == Missilelauncher.vendorId && device.productId == Missilelauncher.productId
+      device.vendorId == Missilelauncher.vendorId and device.productId == Missilelauncher.productId
     launchers = (device.path for device in devices when match(device))
 
   @defaultConfig: defaultConfig
@@ -70,7 +70,7 @@ class Missilelauncher
     @busy = false
     @direction = {}
 
-  sendCommand: (command) ->
+  _sendCommand: (command) ->
     return false unless typeof command == 'string'
     cmd = Missilelauncher.commands[command.toUpperCase()]
     @device.write [0x02, cmd, 0x00,0x00,0x00,0x00,0x00,0x00]
@@ -80,9 +80,9 @@ class Missilelauncher
     @_log "Move #{direction} for #{duration}"
     @busy = true
     ready = Q.defer()
-    @sendCommand direction
+    @_sendCommand direction
     setTimeout =>
-      @sendCommand 'STOP'
+      @_sendCommand 'STOP'
       @busy = false
       ready.resolve()
     , duration
@@ -93,7 +93,7 @@ class Missilelauncher
     @_log "Firing!"
     @busy = true
     ready = Q.defer()
-    @sendCommand 'FIRE'
+    @_sendCommand 'FIRE'
     setTimeout =>
       @busy = false
       ready.resolve()
@@ -122,7 +122,7 @@ class Missilelauncher
     ]
 
   sequence: (commandSequence) ->
-    return Q.defer().resolve().promise if !commandSequence || commandSequence.length == 0
+    return Q.defer().resolve().promise if !commandSequence or commandSequence.length == 0
     parsedSequence = (@parseCommand(cmd) for cmd in commandSequence)
     ready = parsedSequence.shift()()
     while next = parsedSequence.shift()
@@ -145,16 +145,27 @@ class Missilelauncher
     else
       throw "#{command} is not a valid command"
   
+  _limitTurning: (angle, direction) ->
+    #console.log 'LIMIT TURNING', angle, direction, @direction[direction]
+    if @direction[direction] + angle > @config.angle[direction].max
+      @config.angle[direction].max - @direction[direction]
+    else if @direction[direction] + angle < @config.angle[direction].min
+      @config.angle[direction].min - @direction[direction]
+    else
+      angle
+  
   turnBy: (angle) ->
     direction = if angle > 0 then 'RIGHT' else 'LEFT'
-    duration = Math.round(Math.abs(angle) * @config.angle.horizontal.rate)
+    angle = @_limitTurning(angle, 'horizontal')
+    duration = @timeToTurn(horizontal: angle, null, false)
     @direction.horizontal += angle
     @_log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
     @move(direction, duration)
     
   pitchBy: (angle) ->
     direction = if angle > 0 then 'UP' else 'DOWN'
-    duration = Math.round(Math.abs(angle) * @config.angle.vertical.rate)
+    angle = @_limitTurning(angle, 'vertical')
+    duration = @timeToTurn(vertical: angle, null, false)
     @direction.vertical += angle
     @_log "Turn", direction, 'by', angle, 'deg in', duration, 'ms'
     @move(direction, duration)
@@ -162,12 +173,23 @@ class Missilelauncher
   pointTo: (horizontal, vertical) ->
     if typeof horizontal == 'object'
       {horizontal, vertical} = horizontal
-    horizontal = @config.angle.horizontal.max if horizontal > @config.angle.horizontal.max
-    horizontal = @config.angle.horizontal.min if horizontal < @config.angle.horizontal.min
-    vertical = @config.angle.vertical.max if vertical > @config.angle.vertical.max
-    vertical = @config.angle.vertical.min if vertical < @config.angle.vertical.min
     @pitchBy(vertical - @direction.vertical)
       .then(=> @turnBy(horizontal - @direction.horizontal))
+  
+  timeToTurn: (horizontal, vertical, absolute = true) ->
+    if horizontal? and typeof horizontal == 'object'
+      {horizontal, vertical} = horizontal
+    time = 0
+    if horizontal?
+      horizontal -= @direction.horizontal if absolute
+      horizontal = @_limitTurning(horizontal, 'horizontal')
+      time += Math.round(Math.abs(horizontal) * @config.angle.horizontal.rate)
+    if vertical?
+      vertical -= @direction.vertical if absolute
+      vertical = @_limitTurning(vertical, 'vertical')
+      time += Math.round(Math.abs(vertical) * @config.angle.vertical.rate)
+    #console.log 'TIME TO TURN', (if absolute then 'to' else ''), horizontal, vertical, time
+    time
   
   zero: ->
     @reset().then(=> @pointTo(0,0))
