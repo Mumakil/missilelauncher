@@ -1,4 +1,4 @@
-MissileLauncher = require './lib/missilelauncher'
+MissileLauncher = require './src/missilelauncher'
 
 launcherPaths = MissileLauncher.findLaunchers()
 

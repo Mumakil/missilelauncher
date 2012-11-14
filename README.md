@@ -47,7 +47,6 @@ launcher.zero().then ->
 Dependencies
 ------------
 
-* Coffeescript
 * node-hid
 * Q
 

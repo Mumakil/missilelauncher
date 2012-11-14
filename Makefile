@@ -14,4 +14,17 @@ test-w:
 		--growl \
 		--watch
 
+build:
+	./node_modules/.bin/coffee \
+		--compile \
+		--output ./lib \
+		./src
+		
+build-w:
+	./node_modules/.bin/coffee \
+		--compile \
+		--watch \
+		--output ./lib \
+		./src
+
 .PHONY: test test-w
